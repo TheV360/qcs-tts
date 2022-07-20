@@ -413,8 +413,44 @@ do_when_ready(()=>{
 	userTabButtons.appendChild($logOut);
 })
 
-// Configuring beyond the basics:
-/*
+/* ```
+
+* Configuring the basics:
+
+The script contributes a handful of settings, so just check the user tab of the 12 frontend.
+
+* Configuring beyond the basics:
+
+If you insert snippets that modify `TTSSystem` into your UserJS, you can configure the TTS more:
+
+- Add a placeholder sound
+  - simply assign a URL to `TTSSystem.placeholderSound`
+  - plays when volume adjusted in user tab
+  - plays whenever an unrecognized 12y tag is encountered
+- Enable & configure the "skip key"
+  - `TTSSystem.skipKey.enable(true)` - sets up the event handlers and such
+  - `TTSSystem.skipKey.key` (by default is 'Control' - but can be any key)
+  - press it once to skip a single utterance
+  - press it twice (relatively) quickly to cancel all utterances
+- Configure default voice
+  - `TTSSystem.userParams[0]` contains global TTS parameters, such as volume - all the stuff that you configure inside the user tab.
+  - `TTSSystem.userParams[0].voice = "Zira" `
+- Create per-user TTS synthesizer parameter profiles
+  - two types of keys into `userParams`: (may change later)
+    - qcs user id (number)
+    - bridge name (string)
+  - and a parameter object includes these fields:
+    - `nickname` - a string that specifies how the TTS speaks the username
+    - `voice` - a string that matches (part of) a TTS voice
+    - `volume` - a number in [0, 1]. how loud the voice is
+    - `pitch` - a number in [0, 2]. the pitch of the voice
+    - `rate` - a number in [0.1, 10]. how fast the voice speaks
+
+* Example UserJS:
+
+with a cute little try block just in case.
+
+``` js
 do_when_ready(()=>{ try {
 	TTSSystem.placeholderSound = "https://raw.githubusercontent.com/TheV360/qcs-tts/main/meow.wav"
 	TTSSystem.skipKey.enable(true)
@@ -426,13 +462,21 @@ do_when_ready(()=>{ try {
 	// and.. well there's the list of params demonstrated there:
 	TTSSystem.userParams[123] = { nickname: 'v 3 60' }
 	TTSSystem.userParams["V360"] = {
-		nickname: 'v 3 60', // how the TTS should speak the username
+		nickname: 'v 3 60',
 		voice: "Zira",
 		volume: 1,
 		pitch: 1,
-		rate: 1.25
+		rate: 3.60
 	}
 } catch { Sidebar.print("TTS System not loaded.") } })
-*/
+```
 
-// ```
+* cool ideas for the future
+
+- list of words to replace with either alternate pronunciations or sounds
+  - don't pronounce "nade nade" like grenade.
+  - meme potential.
+
+```js
+hi
+*/// ```
