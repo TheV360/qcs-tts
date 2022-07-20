@@ -377,7 +377,7 @@ Settings.add({
 	},
 })
 
-Events.messages.listen(this, (e)=>{
+Events.messages.listen(this, (c)=>{
 	if (Settings.values.tts_notify == 'no') return
 	
 	if (c.length > 3) {
@@ -410,12 +410,14 @@ do_when_ready(()=>{
 	let injectButton = document.createElement('button');
 	injectButton.onclick = ()=>TTSSystem.cancel();
 	injectButton.onmouseover = ()=>{
-		this.title = `${TTSSystem.queue.length} messages in TTS queue`;
+		injectButton.title = `${TTSSystem.queue.length} messages in TTS queue`;
 	};
 	injectButton.textContent = "Stop TTS";
 	userTabButtons.appendChild(injectButton);
 	userTabButtons.appendChild($logOut);
 })
+
+// Thing's You Can Do:
 
 // do_when_ready(()=>{
 // TTSSystem.placeholderSound = "https://raw.githubusercontent.com/TheV360/qcs-tts/main/meow.wav"
