@@ -38,7 +38,7 @@ const TTSSystem = {
 	speakMessage(message, merged = false) {
 		let tree = Markup.langs.parse(message.text, message.values.m)
 		
-		let opts = { ...this.userParams[0], ...this.getUserParam(message), msg: "" }
+		let opts = { ...this.userParams[0], ...this.getUserParam(message) }
 		
 		if (!merged) {
 			if (!opts.nickname) {
@@ -47,8 +47,11 @@ const TTSSystem = {
 				else
 					opts.nickname = message.Author.username
 			}
-			opts.msg = `${opts.nickname} says\n`
+			if (!opts.msg)
+				opts.msg = `${opts.nickname} says\n`
 		}
+		
+		if (!opts.msg) opts.msg = "";
 		
 		this.speakScript(this.renderSpeechScript(tree, opts))
 	},
@@ -445,6 +448,7 @@ If you insert snippets that modify `TTSSystem` into your UserJS, you can configu
     - `volume` - a number in [0, 1]. how loud the voice is
     - `pitch` - a number in [0, 2]. the pitch of the voice
     - `rate` - a number in [0.1, 10]. how fast the voice speaks
+    - `msg` - a string with the pre-message message (will override `nickname`'s effects)
 
 * Example UserJS:
 
