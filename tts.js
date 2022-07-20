@@ -377,14 +377,14 @@ Settings.add({
 	},
 })
 
-document.addEventListener('got_comments', ev=>{
-	if (Settings.values.tts_notify=='no')
-		return
+Events.messages.listen(this, (e)=>{
+	if (Settings.values.tts_notify == 'no') return
 	
-	let c = ev.detail.comments
-	if (c.length>3) {
+	if (c.length > 3) {
 		c = c.slice(-3)
-		// idk play an explosion sound or something
+		
+		// i'm hilarious.
+		TTSSystem.speakMessage({text:"!https://raw.githubusercontent.com/TheV360/qcs-tts/main/explode.mp3",values:{m:'12y'}}, true)
 	}
 	
 	let pid = View.current instanceof PageView ? View.current.page_id : NaN
@@ -410,7 +410,7 @@ do_when_ready(()=>{
 	let injectButton = document.createElement('button');
 	injectButton.onclick = ()=>TTSSystem.cancel();
 	injectButton.onmouseover = ()=>{
-		this.title = `${TTSSystem.queue.length} messages in TTS queue`
+		this.title = `${TTSSystem.queue.length} messages in TTS queue`;
 	};
 	injectButton.textContent = "Stop TTS";
 	userTabButtons.appendChild(injectButton);
@@ -418,7 +418,7 @@ do_when_ready(()=>{
 })
 
 // do_when_ready(()=>{
-// TTSSystem.placeholderSound = ""
+// TTSSystem.placeholderSound = "https://raw.githubusercontent.com/TheV360/qcs-tts/main/meow.wav"
 // TTSSystem.skipKey.enable(true)
 // 
 // TTSSystem.userParams[123] = { nickname: 'v 3 60' }
