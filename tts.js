@@ -1,5 +1,7 @@
 'use strict'
 
+// ```js
+
 const TTSSystem = {
 	speakUtterance(u) {
 		return new Promise((yay, nay) => {
@@ -36,7 +38,7 @@ const TTSSystem = {
 	speakMessage(message, merged = false) {
 		let tree = Markup.langs.parse(message.text, message.values.m)
 		
-		let opts = { ...this.getUserParam(message), msg: "" }
+		let opts = { ...this.userParams[0], ...this.getUserParam(message), msg: "" }
 		
 		if (!merged) {
 			if (!opts.nickname) {
@@ -76,15 +78,13 @@ const TTSSystem = {
 	
 	placeholderSound: null,
 	
-	synthParams: {
-		voice: null,
-		volume: 1,
-		pitch: 1,
-		rate: 1.25,
-	},
-	
 	userParams: {
-		// [userId || bridge name]: { any fields of synthParams you want to override }
+		[0]: { // global params
+			voice: null,
+			volume: 1,
+			pitch: 1,
+			rate: 1.25,
+		},
 	},
 	
 	voiceFrom(name) {
@@ -97,10 +97,6 @@ const TTSSystem = {
 		
 		if ('string'==typeof opts.voice)
 			opts.voice = this.voiceFrom(opts.voice)
-		
-		opts.volume || (opts.volume = this.synthParams.volume)
-		opts.pitch || (opts.pitch = this.synthParams.pitch)
-		opts.rate || (opts.rate = this.synthParams.rate)
 		
 		opts.utter || (opts.utter = [])
 		opts.media || (opts.media = {})
@@ -338,7 +334,7 @@ Settings.add({
 	step: "0.05", //making this a string to /potentially/ bypass floating point
 	notches: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], // 🥴
 	update(value, type) {
-		TTSSystem.synthParams.volume = value
+		TTSSystem.userParams[0].volume = value
 		if ('change'==type) {
 			TTSSystem.cancel()
 			if (TTSSystem.placeholderSound)
@@ -355,7 +351,7 @@ Settings.add({
 	default: 1,
 	notches: [1],
 	update(value, type) {
-		TTSSystem.synthParams.rate = value
+		TTSSystem.userParams[0].rate = value
 		if ('change'==type) {
 			TTSSystem.cancel()
 			TTSSystem.speakMessage({text:"example message",values:{m:'plaintext'}}, true)
@@ -369,7 +365,7 @@ Settings.add({
 	default: 1,
 	notches: [1],
 	update(value, type) {
-		TTSSystem.synthParams.pitch = value
+		TTSSystem.userParams[0].pitch = value
 		if ('change'==type) {
 			TTSSystem.cancel()
 			TTSSystem.speakMessage({text:"example message",values:{m:'plaintext'}}, true)
@@ -417,12 +413,26 @@ do_when_ready(()=>{
 	userTabButtons.appendChild($logOut);
 })
 
-// Thing's You Can Do:
+// Configuring beyond the basics:
+/*
+do_when_ready(()=>{ try {
+	TTSSystem.placeholderSound = "https://raw.githubusercontent.com/TheV360/qcs-tts/main/meow.wav"
+	TTSSystem.skipKey.enable(true)
+	
+	TTSSystem.userParams[0].voice = "Zira" // global voice
+	// string only has to match a little of the name
+	
+	// userParams accepts either a user id or a bridge name as its key,
+	// and.. well there's the list of params demonstrated there:
+	TTSSystem.userParams[123] = { nickname: 'v 3 60' }
+	TTSSystem.userParams["V360"] = {
+		nickname: 'v 3 60', // how the TTS should speak the username
+		voice: "Zira",
+		volume: 1,
+		pitch: 1,
+		rate: 1.25
+	}
+} catch { Sidebar.print("TTS System not loaded.") } })
+*/
 
-// do_when_ready(()=>{
-// TTSSystem.placeholderSound = "https://raw.githubusercontent.com/TheV360/qcs-tts/main/meow.wav"
-// TTSSystem.skipKey.enable(true)
-// 
-// TTSSystem.userParams[123] = { nickname: 'v 3 60' }
-// TTSSystem.userParams["V360"] = { rate: 3.60, nickname: 'v 3 60' }
-// })
+// ```
