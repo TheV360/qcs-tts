@@ -28,52 +28,82 @@ const TTSSystem = {
 		})
 	},
 	
-	getUserParam(message) {
+	getMessageAuthorName(message) {
 		if (message.Author && message.Author.bridge)
-			return this.userParams[message.Author.nickname || message.values.b]
+			return message.Author.nickname || message.values.b;
 		else
-			return this.userParams[message.createUserId]
+			return message.Author.username;
+	},
+	
+	getUserParam(message) {
+		let k; if (message.Author && message.Author.bridge)
+			k = message.Author.nickname || message.values.b
+		else
+			k = message.createUserId;
+		return Object.assign({}, this.userParams[0], this.userParams[k]);
+	},
+	
+	lastMessage: [
+		// roomId,
+		// userId,
+		// time
+	], // OR simply blank array when roomID changes, lol
+	
+	speakString(message) {
+		let utter = new SpeechSynthesisUtterance(String(message));
+		let opts = this.userParams[0];
+		utter.voice = this.voiceFrom(opts.voice);
+		utter.volume = opts.volume;
+		utter.pitch = opts.pitch;
+		utter.rate = opts.rate;
+		this.speakUtteranceBatch([ utter ])
+	},
+	speakSound(elem) {
+		if (!(elem instanceof HTMLAudioElement))
+			elem = new Audio(elem);
+		elem.loop = false;
+		this.speakUtteranceBatch([{ elem, volume: this.userParams[0].volume }])
+		return elem; // -> so you can cache stuff like placeholderSound
 	},
 	
 	speakMessage(message, merged = false) {
-		let tree = Markup.langs.parse(message.text, message.values.m)
-		
-		let opts = { ...this.userParams[0], ...this.getUserParam(message) }
-		
-		if (!merged) {
-			if (!opts.nickname) {
-				if (message.Author && message.Author.bridge)
-					opts.nickname = message.Author.nickname || message.values.b
-				else
-					opts.nickname = message.Author.username
-			}
-			if (!opts.msg)
-				opts.msg = `${opts.nickname} says\n`
+		if ('object'!=typeof message) {
+			message = { text: String(message), values: { m: 'plaintext' } };
+			merged = true;
 		}
 		
-		if (!opts.msg) opts.msg = "";
+		let tree = Markup.langs.parse(message.text, message.values.m);
 		
-		this.speakScript(this.renderSpeechScript(tree, opts))
+		let opts = this.getUserParam(message);
+		
+		if (!merged) {
+			opts.nickname || (opts.nickname = this.getMessageAuthorName(message));
+			opts.msg || (opts.msg = `${opts.nickname} says; `);
+		}
+		
+		this.speakUtteranceBatch(this.renderUtteranceBatch(tree, opts))
 	},
 	
 	queue: [],
-	currentScript: null,
+	currentBatch: null,
 	currentPart: null,
-	async speakScript(utter) {
+	
+	async speakUtteranceBatch(utter) {
 		this.queue.push(utter)
-		if (this.queue.length > 1 || this.currentScript)
-			return
+		
+		// it may already be speaking. if so, we've already done enough.
+		if (this.queue.length > 1 || this.currentBatch) return;
 		
 		while (this.queue.length) {
 			try {
-				this.currentScript = this.queue.shift()
-				for (let u of this.currentScript) {
+				this.currentBatch = this.queue.shift()
+				for (let u of this.currentBatch) {
 					this.currentPart = u
 					if (u instanceof SpeechSynthesisUtterance) await this.speakUtterance(u)
 					else if (u.elem instanceof HTMLAudioElement) await this.playSound(u)
 				}
 			} catch {} finally {
-				this.currentScript = null
+				this.currentBatch = null
 				this.currentPart = null
 			}
 		}
@@ -90,12 +120,15 @@ const TTSSystem = {
 		},
 	},
 	
+	_textReplacements: [],
+	replaceText(x, y) { this._textReplacements.push([x, y]) },
+	
 	voiceFrom(name) {
 		return speechSynthesis.getVoices().find(v=>v.name.includes(name))
 	},
 	
 	// creates a list of smaller utterances and media to play in sequence
-	renderSpeechScript(tree, opts = {}) {
+	renderUtteranceBatch(tree, opts = {}) {
 		opts.msg || (opts.msg = "")
 		
 		if ('string'==typeof opts.voice)
@@ -105,24 +138,21 @@ const TTSSystem = {
 		opts.media || (opts.media = {})
 		
 		let sound = url=>{
-			if (!url)
-				return
+			if (!url) return;
 			finalizeChunk()
 			let u = { volume: Math.max(0, Math.min(opts.volume, 1)) }
-			if (url instanceof HTMLAudioElement)
-				u.elem = url
-			else
-				u.elem = opts.media[url] || (opts.media[url] = new Audio(url))
+			if (url instanceof HTMLAudioElement) u.elem = url;
+			else u.elem = opts.media[url] || (opts.media[url] = new Audio(url));
 			u.elem.loop = false
 			opts.utter.push(u)
-			return u
+			return u;
 		}
 		
 		let renderWithAltParams = (elem, {volume = 1, pitch = 1, rate = 1})=>{
 			let prev = [ opts.volume, opts.pitch, opts.rate ]
 			opts.volume *= volume; opts.pitch *= pitch; opts.rate *= rate
 			finalizeChunk()
-			this.renderSpeechScript(elem, opts)
+			this.renderUtteranceBatch(elem, opts)
 			finalizeChunk()
 			;[ opts.volume, opts.pitch, opts.rate ] = prev
 		}
@@ -130,8 +160,7 @@ const TTSSystem = {
 		// pushes utterance onto the end of the speech queue.
 		let finalizeChunk = ()=>{
 			opts.msg = opts.msg.trim()
-			if (!opts.msg.length)
-				return
+			if (!opts.msg.length) return;
 			
 			let u = new SpeechSynthesisUtterance(opts.msg)
 			u.voice = opts.voice
@@ -145,7 +174,7 @@ const TTSSystem = {
 		
 		// goofy way to do things
 		function simplifyUrl(s) {
-			if (s.includes("://qcs.s")) return "qcs"
+			if (s.startsWith("sbs:") || s.includes("://qcs.s")) return "qcs"
 			if (s.includes("cdn.discordapp.com/")) return "discord"
 			if (s.includes(" ") && !s.includes(".")) return false // silly fake link heuristics
 			if (s.includes(" ") && s.includes(".") && s.indexOf(" ") < s.indexOf(".")) return false
@@ -156,22 +185,20 @@ const TTSSystem = {
 		
 		for (let elem of tree.content) {
 			if ('string'==typeof elem) {
-				if (elem.length > 2500)
-					opts.msg += "(message too long)"
-				else
+				this._textReplacements.forEach(([match, replace])=>{
+					elem = elem.replaceAll(match, replace)
+				});
+				
 					opts.msg += elem
 			} else switch (elem.type) {
 				case 'italic': {
-					this.renderSpeechScript(elem, opts)
-					// renderWithAltParams(elem, { rate: 0.75 })
+					this.renderUtteranceBatch(elem, opts)
 				} break;case 'bold': {
-					this.renderSpeechScript(elem, opts)
-					// renderWithAltParams(elem, { pitch: 0.75 })
+					this.renderUtteranceBatch(elem, opts)
 				} break;case 'strikethrough': {
 					renderWithAltParams(elem, { rate: 1.25, volume: 0.75 })
 				} break;case 'underline': {
-					this.renderSpeechScript(elem, opts)
-					// renderWithAltParams(elem, { pitch: 0.75, rate: 0.75 })
+					this.renderUtteranceBatch(elem, opts)
 				} break;case 'video': {
 					opts.msg += `\nvideo from ${simplifyUrl(elem.args.url)}\n`
 				} break;case 'youtube': {
@@ -181,7 +208,7 @@ const TTSSystem = {
 					// i treat these as either inline or block respectively.
 					// inline being normal space pause, block being sentence break.
 					if (elem.content) {
-						this.renderSpeechScript(elem, opts)
+						this.renderUtteranceBatch(elem, opts)
 						opts.msg += " (link)"
 					} else {
 						opts.msg += elem.args.text ? ` ${elem.args.text} (link)` : `\nlink to ${simplifyUrl(elem.args.url)}\n`
@@ -216,23 +243,23 @@ const TTSSystem = {
 					if (elem.args.cite)
 						opts.msg += ` from ${elem.args.cite}`
 					opts.msg += "\n"
-					this.renderSpeechScript(elem, opts)
+					this.renderUtteranceBatch(elem, opts)
 					opts.msg += "\n(end quote)\n"
 				} break;case 'ruby': {
-					this.renderSpeechScript(elem, opts)
+					this.renderUtteranceBatch(elem, opts)
 					if (elem.args.text)
 						opts.msg += ` (${elem.args.text})`
 				} break;case 'bg':case 'key':case 'list':case 'anchor': {
-					this.renderSpeechScript(elem, opts)
+					this.renderUtteranceBatch(elem, opts)
 				} break;case 'list_item': {
-					this.renderSpeechScript(elem, opts)
+					this.renderUtteranceBatch(elem, opts)
 					opts.msg += "\n"
 				} break;case 'align': {
 					opts.msg += "\n"
-					this.renderSpeechScript(elem, opts)
+					this.renderUtteranceBatch(elem, opts)
 					opts.msg += "\n"
 				} break;case 'table_cell': {
-					this.renderSpeechScript(elem, opts)
+					this.renderUtteranceBatch(elem, opts)
 					opts.msg += "; "
 				} break;case 'divider': {
 					opts.msg += "\n"
@@ -242,12 +269,12 @@ const TTSSystem = {
 					if (!headers) opts.msg += "\ntable\n"
 					else {
 						opts.msg += "\ntable with headers: "
-						this.renderSpeechScript(headers, opts)
+						this.renderUtteranceBatch(headers, opts)
 						opts.msg += "\n"
 					}
 				} break;default: {
 					if (elem.content)
-						this.renderSpeechScript(elem, opts)
+						this.renderUtteranceBatch(elem, opts)
 					else {
 						// store loaded copy of placeholderSound for replaying later
 						this.placeholderSound = sound(this.placeholderSound).elem
@@ -343,7 +370,7 @@ Settings.add({
 			if (TTSSystem.placeholderSound)
 				TTSSystem.speakMessage({text:"{#uwu",values:{m:'12y'}}, true)
 			else
-				TTSSystem.speakMessage({text:"example message",values:{m:'plaintext'}}, true)
+				TTSSystem.speakMessage("example message")
 		}
 	}
 })
@@ -357,7 +384,7 @@ Settings.add({
 		TTSSystem.userParams[0].rate = value
 		if ('change'==type) {
 			TTSSystem.cancel()
-			TTSSystem.speakMessage({text:"example message",values:{m:'plaintext'}}, true)
+			TTSSystem.speakMessage("example message")
 		}
 	},
 })
@@ -371,7 +398,7 @@ Settings.add({
 		TTSSystem.userParams[0].pitch = value
 		if ('change'==type) {
 			TTSSystem.cancel()
-			TTSSystem.speakMessage({text:"example message",values:{m:'plaintext'}}, true)
+			TTSSystem.speakMessage("example message")
 		}
 	},
 })
@@ -449,13 +476,22 @@ If you insert snippets that modify `TTSSystem` into your UserJS, you can configu
     - `pitch` - a number in [0, 2]. the pitch of the voice
     - `rate` - a number in [0.1, 10]. how fast the voice speaks
     - `msg` - a string with the pre-message message (will override `nickname`'s effects)
+- Change how text is pronounced with `replaceText`
+  - uses syntax from `String.prototype.replaceAll` (strings, regexes, functions; all available)
+  - `TTSSystem.replaceText("V360", "v 3 60")`
+
+** I want to apply one configuration to multiple keys!
+
+```js
+TTSSystem.userParams[123] = TTSSystem.userParams["bridge"] = { nickname: "bridge user" }
+```
+
+And if you ever want to get really wild, there's always `Object.assign`.
 
 * Example UserJS:
 
-with a cute little try block just in case.
-
-``` js
-do_when_ready(()=>{ try {
+```js
+do_when_ready(()=>{
 	TTSSystem.placeholderSound = "https://raw.githubusercontent.com/TheV360/qcs-tts/main/meow.wav"
 	TTSSystem.skipKey.enable(true)
 	
@@ -464,15 +500,15 @@ do_when_ready(()=>{ try {
 	
 	// userParams accepts either a user id or a bridge name as its key,
 	// and.. well there's the list of params demonstrated there:
-	TTSSystem.userParams[123] = { nickname: 'v 3 60' }
-	TTSSystem.userParams["V360"] = {
-		nickname: 'v 3 60',
+	TTSSystem.userParams[123] = { nickname: "qcs user" }
+	TTSSystem.userParams["bridge"] = {
+		nickname: "bridge user",
 		voice: "Zira",
 		volume: 1,
 		pitch: 1,
 		rate: 3.60
 	}
-} catch { Sidebar.print("TTS System not loaded.") } })
+})
 ```
 
 * cool ideas for the future
