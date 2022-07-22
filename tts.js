@@ -126,10 +126,12 @@ const TTSSystem = {
 	},
 	
 	_textReplacements: [],
-	replaceText(pattern, replacement) {
+	replaceText(pattern, replacement, surround = true) {
 		if ('string' == typeof pattern) {
-			pattern = new RegExp(`\\b${TTSSystem.escapePattern(pattern)}\\b`, 'gi' /* thoughts? */);
+			pattern = new RegExp(`\\b${TTSSystem.escapePattern(pattern)}\\b`, 'gi');
 			replacement = TTSSystem.escapeReplacement(replacement);
+		} else if (pattern instanceof RegExp && !pattern.flags && surround) {
+			pattern = new RegExp(`\\b${pattern.source}\\b`, 'gi');
 		}
 		this._textReplacements.push([pattern, replacement]);
 	},
@@ -542,6 +544,7 @@ If you insert snippets that modify `TTSSystem` into your UserJS, you can configu
   - uses syntax from `String.prototype.replaceAll` (strings, regexes, functions; all available)
   - `TTSSystem.replaceText(`{#sup{#sub pattern:}}`"V360",`{#sup{#sub replacement:}}`"v 3 60")`
   - if pattern is a string, it'll be converted into a regex. you don't have to think about escaping or anything, it's all good.
+  - if pattern is a regex and it has no flags set (and the secret third "surround" flag isn't unset), it'll be surrounded with word boundaries and given flags and everything,
 
 ** I want to apply one configuration to multiple keys!
 
