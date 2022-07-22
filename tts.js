@@ -43,11 +43,11 @@ const TTSSystem = {
 		return Object.assign({}, this.userParams[0], this.userParams[k]);
 	},
 	
-	lastMessage: [
-		// roomId,
-		// userId,
-		// time
-	], // OR simply blank array when roomID changes, lol
+	lastMessage: {
+		room: NaN,
+		user: NaN,
+		time: NaN,
+	},
 	
 	speakString(message) {
 		let utter = new SpeechSynthesisUtterance(String(message));
@@ -66,7 +66,8 @@ const TTSSystem = {
 		return elem; // -> so you can cache stuff like placeholderSound
 	},
 	
-	speakMessage(message, merged = false) {
+	// need to refactor this Now..
+	batchFromMessage(message, merged = false) {
 		if ('object'!=typeof message) {
 			message = { text: String(message), values: { m: 'plaintext' } };
 			merged = true;
@@ -81,15 +82,19 @@ const TTSSystem = {
 			opts.msg || (opts.msg = `${opts.nickname} says; `);
 		}
 		
-		this.speakUtteranceBatch(this.renderUtteranceBatch(tree, opts))
+		return { batch: this.renderUtteranceBatch(tree, opts), tag: message.id };
+	},
+	
+	speakMessage(message, merged = false) {
+		this.speakUtteranceBatch(this.batchFromMessage(message, merged))
 	},
 	
 	queue: [],
 	currentBatch: null,
 	currentPart: null,
 	
-	async speakUtteranceBatch(utter) {
-		this.queue.push(utter)
+	async speakUtteranceBatch(batch) {
+		this.queue.push(batch);
 		
 		// it may already be speaking. if so, we've already done enough.
 		if (this.queue.length > 1 || this.currentBatch) return;
@@ -97,7 +102,7 @@ const TTSSystem = {
 		while (this.queue.length) {
 			try {
 				this.currentBatch = this.queue.shift()
-				for (let u of this.currentBatch) {
+				for (let u of this.currentBatch.batch) {
 					this.currentPart = u
 					if (u instanceof SpeechSynthesisUtterance) await this.speakUtterance(u)
 					else if (u.elem instanceof HTMLAudioElement) await this.playSound(u)
@@ -198,7 +203,7 @@ const TTSSystem = {
 					elem = elem.replaceAll(match, replace)
 				});
 				
-					opts.msg += elem
+				opts.msg += elem
 			} else switch (elem.type) {
 				case 'italic': {
 					this.renderUtteranceBatch(elem, opts)
@@ -310,6 +315,31 @@ const TTSSystem = {
 		speechSynthesis.cancel()
 		if (this.currentPart && this.currentPart.elem instanceof HTMLAudioElement)
 			this.currentPart.elem.pause()
+	},
+	
+	// skip a tagged batch that matches the provided tag
+	skipTagged(tag) {
+		if (this.currentBatch && this.currentBatch.tag == tag) this.skip();
+		else this.queue = this.queue.filter(({t})=>tag!=t);
+	},
+	
+	// replace one tagged batch with another
+	replaceTagged(tag, newBatch) {
+		if (this.currentBatch && this.currentBatch.tag == tag) {
+			this.queue.unshift(newBatch);
+			this.skip();
+		} else {
+			let hits = 0;
+			
+			for (let [i, b] of this.queue.entries()) {
+				if (b.tag != tag) continue;
+				
+				this.queue[i] = newBatch;
+				hits++;
+			}
+			
+			if (!hits) this.speakUtteranceBatch(newBatch);
+		}
 	},
 	
 	// cancel all utterances
@@ -424,18 +454,41 @@ Events.messages.listen(this, (c)=>{
 	
 	let pid = View.current instanceof PageView ? View.current.page_id : NaN
 	
-	for (let msg of c) {
+	for (let message of c) {
 		// filter out
-		if (msg.createUserId ==Req.uid && Settings.values.tts_notify!='yes')
-			continue
-		if (!Entity.is_new_comment(msg))
+		if (message.createUserId == Req.uid)
+		if (Settings.values.tts_notify != 'yes')
 			continue
 		
-		if (msg.contentId==pid) {
+		if (message.contentId == pid) {
 			// current room
-			TTSSystem.speakMessage(msg)
+			
+			let [ room, user, time ] = [ message.contentId, message.createUserId, new Date(message.createDate) ];
+			
+			let merge = TTSSystem.lastMessage.room == room
+			&& TTSSystem.lastMessage.user == user
+			&& Math.abs(time - TTSSystem.lastMessage.time) < 1000*60*3;
+			
+			if (message.deleted) {
+				TTSSystem.skipTagged(message.id);
+				continue;
+			}
+			
+			TTSSystem.lastMessage.room = room;
+			TTSSystem.lastMessage.user = user;
+			TTSSystem.lastMessage.time = time;
+			
+			if (message.edited) {
+				let batch = TTSSystem.batchFromMessage(message, merge);
+				TTSSystem.replaceTagged(message.id, batch);
+				continue;
+			}
+			
+			TTSSystem.speakMessage(message, merge);
 		} else {
 			// another room
+			
+			// TODO: sound effects for things happening in other room.
 		}
 	}
 })
