@@ -121,7 +121,16 @@ const TTSSystem = {
 	},
 	
 	_textReplacements: [],
-	replaceText(x, y) { this._textReplacements.push([x, y]) },
+	replaceText(pattern, replacement) {
+		if ('string' == typeof pattern) {
+			pattern = new RegExp(`\\b${TTSSystem.escapePattern(pattern)}\\b`, 'gi' /* thoughts? */);
+			replacement = TTSSystem.escapeReplacement(replacement);
+		}
+		this._textReplacements.push([pattern, replacement]);
+	},
+	
+	escapePattern(p) { return p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); },
+	escapeReplacement(r) { return r.replace(/\$/g, '$$$$'); },
 	
 	voiceFrom(name) {
 		return speechSynthesis.getVoices().find(v=>v.name.includes(name))
@@ -478,7 +487,8 @@ If you insert snippets that modify `TTSSystem` into your UserJS, you can configu
     - `msg` - a string with the pre-message message (will override `nickname`'s effects)
 - Change how text is pronounced with `replaceText`
   - uses syntax from `String.prototype.replaceAll` (strings, regexes, functions; all available)
-  - `TTSSystem.replaceText("V360", "v 3 60")`
+  - `TTSSystem.replaceText(`{#sup{#sub pattern:}}`"V360",`{#sup{#sub replacement:}}`"v 3 60")`
+  - if pattern is a string, it'll be converted into a regex. you don't have to think about escaping or anything, it's all good.
 
 ** I want to apply one configuration to multiple keys!
 
@@ -510,12 +520,6 @@ do_when_ready(()=>{
 	}
 })
 ```
-
-* cool ideas for the future
-
-- list of words to replace with either alternate pronunciations or sounds
-  - don't pronounce "nade nade" like grenade.
-  - meme potential.
 
 ```js
 hi
