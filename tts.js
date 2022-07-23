@@ -325,22 +325,27 @@ const TTSSystem = {
 		else this.queue = this.queue.filter(({t})=>tag!=t);
 	},
 	
-	// replace one tagged batch with another
+	// replace one tagged batch with a lazily-evaluated batch.
+	// returns whether newBatch was used or not
 	replaceTagged(tag, newBatch) {
 		if (this.currentBatch && this.currentBatch.tag == tag) {
-			this.queue.unshift(newBatch);
+			this.queue.unshift(newBatch());
 			this.skip();
+			
+			return true;
 		} else {
 			let hits = 0;
 			
 			for (let [i, b] of this.queue.entries()) {
 				if (b.tag != tag) continue;
 				
-				this.queue[i] = newBatch;
+				this.queue[i] = newBatch();
 				hits++;
 			}
 			
-			if (!hits) this.speakUtteranceBatch(newBatch);
+			// if (!hits) this.speakUtteranceBatch(newBatch());
+			
+			return hits > 0;
 		}
 	},
 	
@@ -445,22 +450,17 @@ Settings.add({
 })
 
 Events.messages.listen(this, (c)=>{
-	if (Settings.values.tts_notify == 'no') return
+	if (Settings.values.tts_notify == 'no') return;
 	
-	if (c.length > 3) {
-		c = c.slice(-3)
-		
-		// i'm hilarious.
-		TTSSystem.speakMessage({text:"!https://raw.githubusercontent.com/TheV360/qcs-tts/main/explode.mp3",values:{m:'12y'}}, true)
-	}
+	if (c.length > 3) c = c.slice(-3);
 	
-	let pid = View.current instanceof PageView ? View.current.page_id : NaN
+	let pid = View.current instanceof PageView ? View.current.page_id : NaN;
 	
 	for (let message of c) {
 		// filter out
 		if (message.createUserId == Req.uid)
 		if (Settings.values.tts_notify != 'yes')
-			continue
+			continue;
 		
 		if (message.contentId == pid) {
 			// current room
@@ -481,8 +481,10 @@ Events.messages.listen(this, (c)=>{
 			TTSSystem.lastMessage.time = time;
 			
 			if (message.edited) {
-				let batch = TTSSystem.batchFromMessage(message, merge);
-				TTSSystem.replaceTagged(message.id, batch);
+				let batch = ()=>TTSSystem.batchFromMessage(message, merge);
+				if (!TTSSystem.replaceTagged(message.id, batch)) {
+					// TODO: sound effects for unused replacement
+				}
 				continue;
 			}
 			
