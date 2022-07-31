@@ -192,6 +192,7 @@ const TTSSystem = {
 		function simplifyUrl(s) {
 			if (s.startsWith("sbs:") || s.includes("://qcs.s")) return "qcs"
 			if (s.includes("cdn.discordapp.com/")) return "discord"
+			if (s.includes("pbs.twimg.com/")) return "twitter"
 			if (s.includes(" ") && !s.includes(".")) return false // silly fake link heuristics
 			if (s.includes(" ") && s.includes(".") && s.indexOf(" ") < s.indexOf(".")) return false
 			if (s.startsWith('#')) return `anchor "${s.substring(1)}"`
@@ -240,7 +241,9 @@ const TTSSystem = {
 					// todo: time limite for audio?
 				} break;case 'code': {
 					opts.msg += "\ncode block"
-					if (elem.args.lang && elem.args.lang != 'sb') // sign of the times...
+					if (elem.args.lang
+					&&  elem.args.lang != 'none'
+					&&  elem.args.lang != 'sb') // sign of the times...
 						opts.msg += ` written in ${elem.args.lang}`
 					opts.msg += "\n"
 				} break;case 'icode': {
@@ -364,9 +367,11 @@ const TTSSystem = {
 			if (!state) {
 				document.removeEventListener('keydown', this.keydown)
 				document.removeEventListener('keyup', this.keyup)
+				window.removeEventListener('blur', this.windowBlur)
 			} else {
 				document.addEventListener('keydown', this.keydown)
 				document.addEventListener('keyup', this.keyup)
+				window.addEventListener('blur', this.windowBlur)
 			}
 			this._enabled = state
 		},
@@ -385,6 +390,8 @@ const TTSSystem = {
 			}
 		},
 		keyup(event) {
+			if (!document.hasFocus()) return;
+			
 			let k = TTSSystem.skipKey
 			if (event.key == k.key) {
 				if (k.action == 'single') {
@@ -395,59 +402,63 @@ const TTSSystem = {
 					k.action = null
 				}
 			}
-		}
+		},
+		
+		windowBlur(_event) { TTSSystem.skipKey.action = null }
 	}
 }
 
-Settings.add({
-	name: 'tts_notify', label: "TTS Notify", type: 'select',
-	options: ['no', 'everyone else', 'yes'],
-})
-Settings.add({
-	name: 'tts_volume', label: "TTS Volume", type: 'range',
-	range: [0.0, 1.0],
-	default: 0.5,
-	step: "0.05", //making this a string to /potentially/ bypass floating point
-	notches: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], // 🥴
-	update(value, type) {
-		TTSSystem.userParams[0].volume = value
-		if ('change'==type) {
-			TTSSystem.cancel()
-			if (TTSSystem.placeholderSound)
-				TTSSystem.speakMessage({text:"{#uwu",values:{m:'12y'}}, true)
-			else
+;(()=>{
+	Settings.add({
+		name: 'tts_notify', label: "TTS Notify", type: 'select',
+		options: ['no', 'everyone else', 'yes'],
+	})
+	Settings.add({
+		name: 'tts_volume', label: "TTS Volume", type: 'range',
+		range: [0.0, 1.0],
+		default: 0.5,
+		step: "0.05", //making this a string to /potentially/ bypass floating point
+		notches: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9], // 🥴
+		update(value, type) {
+			TTSSystem.userParams[0].volume = value
+			if ('change'==type) {
+				TTSSystem.cancel()
+				if (TTSSystem.placeholderSound)
+					TTSSystem.speakMessage({text:"{#uwu",values:{m:'12y'}}, true)
+				else
+					TTSSystem.speakMessage("example message")
+			}
+		}
+	})
+	Settings.add({
+		name: 'tts_speed', label: "TTS Speed", type: 'range',
+		range: [0.5, 5], // (heard range may be narrower)
+		step: "0.05",
+		default: 1,
+		notches: [1],
+		update(value, type) {
+			TTSSystem.userParams[0].rate = value
+			if ('change'==type) {
+				TTSSystem.cancel()
 				TTSSystem.speakMessage("example message")
-		}
-	}
-})
-Settings.add({
-	name: 'tts_speed', label: "TTS Speed", type: 'range',
-	range: [0.5, 5], // (heard range may be narrower)
-	step: "0.05",
-	default: 1,
-	notches: [1],
-	update(value, type) {
-		TTSSystem.userParams[0].rate = value
-		if ('change'==type) {
-			TTSSystem.cancel()
-			TTSSystem.speakMessage("example message")
-		}
-	},
-})
-Settings.add({
-	name: 'tts_pitch', label: "TTS Pitch", type: 'range',
-	range: [0, 2],
-	step: "0.05",
-	default: 1,
-	notches: [1],
-	update(value, type) {
-		TTSSystem.userParams[0].pitch = value
-		if ('change'==type) {
-			TTSSystem.cancel()
-			TTSSystem.speakMessage("example message")
-		}
-	},
-})
+			}
+		},
+	})
+	Settings.add({
+		name: 'tts_pitch', label: "TTS Pitch", type: 'range',
+		range: [0, 2],
+		step: "0.05",
+		default: 1,
+		notches: [1],
+		update(value, type) {
+			TTSSystem.userParams[0].pitch = value
+			if ('change'==type) {
+				TTSSystem.cancel()
+				TTSSystem.speakMessage("example message")
+			}
+		},
+	})
+})()
 
 Events.messages.listen(this, (c)=>{
 	if (Settings.values.tts_notify == 'no') return;
