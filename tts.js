@@ -364,15 +364,10 @@ const TTSSystem = {
 		
 		enable(state = true) {
 			if (this._enabled == state) return
-			if (!state) {
-				document.removeEventListener('keydown', this.keydown)
-				document.removeEventListener('keyup', this.keyup)
-				window.removeEventListener('blur', this.windowBlur)
-			} else {
-				document.addEventListener('keydown', this.keydown)
-				document.addEventListener('keyup', this.keyup)
-				window.addEventListener('blur', this.windowBlur)
-			}
+			let toggle = `${state?'add':'remove'}EventListener`
+			document[toggle]('keydown', this.keydown)
+			document[toggle]('keyup', this.keyup)
+			window[toggle]('blur', this.windowBlur)
 			this._enabled = state
 		},
 		
