@@ -120,13 +120,21 @@ const TTSSystem = {
 	
 	currentNotify: null,
 	
-	async notifySound(p) {
+	async notifySound(url) {
 		if (this.currentNotify)
 			this.currentNotify.pause();
 		
+		let u = { volume: Math.max(0, Math.min(TTSSystem.userParams[0].volume, 1)) };
+		
+		if (url instanceof HTMLAudioElement) u.elem = url;
+		else {
+			u.elem = this.notifyMediaCache[url]
+			|| (this.notifyMediaCache[url] = new Audio(url));
+		}
+		
 		try {
-			this.currentNotify = p;
-			await this.playSound(p);
+			this.currentNotify = u;
+			await this.playSound(u);
 		} catch {} finally {
 			this.currentNotify = null;
 		}
@@ -151,6 +159,9 @@ const TTSSystem = {
 			globalAction: 'none', // guess.
 		},
 	},
+	
+	// i mean it works.
+	notifyMediaCache: {},
 	
 	_textReplacements: [],
 	clearReplacements() { this._textReplacements = []; },
@@ -498,7 +509,8 @@ Events.messages.listen(this, (c)=>{
 		let roomSettings = TTSSystem.getRoomSettings(message.contentId);
 		
 		let isLocal = message.contentId == currentRoom;
-		let action = (isLocal ? roomSettings.localAction : roomSettings.globalAction) || 'none';
+		let localNotNone = roomSettings.localAction !== 'none';
+		let action = ((isLocal && localNotNone) ? roomSettings.localAction : roomSettings.globalAction) || 'none';
 		
 		if (action === 'none') {
 			continue;
@@ -537,10 +549,8 @@ Events.messages.listen(this, (c)=>{
 		} else {
 			// sound effect
 			
-			if (!(action instanceof HTMLAudioElement)) {
-				// TODO: GOD DAM IT! CACHING
-				action = { elem: new Audio(action), volume: TTSSystem.userParams[0].volume };
-			}
+			// skip if it's actually a deletion oops
+			if (message.deleted) continue;
 			
 			TTSSystem.notifySound(action);
 		}
@@ -597,6 +607,16 @@ If you insert snippets that modify `TTSSystem` into your UserJS, you can configu
   - `TTSSystem.replaceText(`{#sup{#sub pattern:}}`"V360",`{#sup{#sub replacement:}}`"v 3 60")`
   - if pattern is a string, it'll be converted into a regex. you don't have to think about escaping or anything, it's all good.
   - if pattern is a regex and it has no flags set (and the secret third "surround" flag isn't unset), it'll be surrounded with word boundaries and given flags and everything,
+  - it's recommended to do `TTSSystem.clearReplacements()` at the start of your siteJS so replacements don't accumulate while you try out new ones
+- Create per-room rules for the TTS system
+  - by default, there's `TTSSystem.roomSettings[0] = { localAction: 'speak', globalAction: 'none' }`
+  - as you can see, both `localAction` and `globalAction` are enums (and they also slightly aren't..) here's the options you can use:
+    - `'speak'` - speak the message
+    - `'none'` - do nothing with the message 
+      - if this is used as the local action, I'll use the global action instead. this makes sense probably
+    - `"`{/url to sound}`"` - play the sound when the message is received
+  - your messages will be unconditionally skipped if you have "TTS Notify" set to `'everyone else'`. if this sucks, tell me and i can change it lo
+  - sorry the official contentapi term is "pages", but uh.. i guess this is okay because it's chat focused, not content focused
 
 ** I want to apply one configuration to multiple keys!
 
@@ -626,6 +646,25 @@ do_when_ready(()=>{
 		pitch: 1,
 		rate: 3.60
 	}
+	
+	// play a funny sound any time something happens
+	let myFunnyNotifSound = "https://raw.githubusercontent.com/TheV360/qcs-tts/main/808cowbell.mp3"
+	TTSSystem.roomSettings[0] = { localAction: 'speak', globalAction: myFunnyNotifSound }
+	
+	// room-specific stuff
+	let quietRoom = 'put the room id here'
+	let ignoreRoom = 'put the room id here'
+	let touhouRoom = 'i dont understand touhou and at this point im too afraid to ask'
+	TTSSystem.roomSettings[quietRoom] = { localAction: 'none' } // only plays notif sound even if active room
+	TTSSystem.roomSettings[ignoreRoom] = { localAction: 'none', globalAction: 'none' } // ignores room
+	TTSSystem.roomSettings[touhouRoom] = { globalAction: 'none' } // falls back to global setting if active room
+	
+	TTSSystem.clearReplacements()
+	TTSSystem.replaceText("lol", "lawl")
+	TTSSystem.replaceText("idk", "i dunno")
+	TTSSystem.replaceText('nade', 'nah day')
+	TTSSystem.replaceText(/a{2,}/, "$&h")
+	TTSSystem.replaceText(/sona(s)?\b/gi, " so nuh$1")
 })
 ```
 
