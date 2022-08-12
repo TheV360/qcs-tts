@@ -18,6 +18,7 @@ const TTSSystem = {
 			
 			se.currentTime = 0
 			se.volume = ('number'==typeof s.volume) ? s.volume : 1.0
+			se.loop = false
 			
 			let removeListeners = ()=>{ se.onpause = se.onerror = null }
 			
@@ -43,6 +44,10 @@ const TTSSystem = {
 		return Object.assign({}, this.userParams[0], this.userParams[k]);
 	},
 	
+	getRoomSettings(room) {
+		return Object.assign({}, this.roomSettings[0], this.roomSettings[room]);
+	},
+	
 	lastMessage: {
 		room: NaN,
 		user: NaN,
@@ -61,7 +66,6 @@ const TTSSystem = {
 	speakSound(elem) {
 		if (!(elem instanceof HTMLAudioElement))
 			elem = new Audio(elem);
-		elem.loop = false;
 		this.speakUtteranceBatch([{ elem, volume: this.userParams[0].volume }])
 		return elem; // -> so you can cache stuff like placeholderSound
 	},
@@ -114,18 +118,42 @@ const TTSSystem = {
 		}
 	},
 	
+	currentNotify: null,
+	
+	async notifySound(p) {
+		if (this.currentNotify)
+			this.currentNotify.pause();
+		
+		try {
+			this.currentNotify = p;
+			await this.playSound(p);
+		} catch {} finally {
+			this.currentNotify = null;
+		}
+	},
+	
 	placeholderSound: null,
 	
 	userParams: {
-		[0]: { // global params
+		[0]: { // global user params
 			voice: null,
 			volume: 1,
 			pitch: 1,
 			rate: 1.25,
 		},
+		// regretting calling this "params"... should be userSettings maybe
+	},
+	
+	// wait aren't user IDs and room IDs the  same thing
+	roomSettings: {
+		[0]: { // global room settings
+			localAction: 'speak', // either 'none', 'speak', "<url to sound>", or HTMLAudioElement (last one intended only for at runtime)
+			globalAction: 'none', // guess.
+		},
 	},
 	
 	_textReplacements: [],
+	clearReplacements() { this._textReplacements = []; },
 	replaceText(pattern, replacement, surround = true) {
 		if ('string' == typeof pattern) {
 			pattern = new RegExp(`\\b${TTSSystem.escapePattern(pattern)}\\b`, 'gi');
@@ -159,7 +187,6 @@ const TTSSystem = {
 			let u = { volume: Math.max(0, Math.min(opts.volume, 1)) }
 			if (url instanceof HTMLAudioElement) u.elem = url;
 			else u.elem = opts.media[url] || (opts.media[url] = new Audio(url));
-			u.elem.loop = false
 			opts.utter.push(u)
 			return u;
 		}
@@ -460,28 +487,40 @@ Events.messages.listen(this, (c)=>{
 	
 	if (c.length > 3) c = c.slice(-3);
 	
-	let pid = View.current instanceof PageView ? View.current.page_id : NaN;
+	let currentRoom = View.current instanceof PageView ? View.current.page_id : NaN;
 	
 	for (let message of c) {
-		// filter out
-		if (message.createUserId == Req.uid)
-		if (Settings.values.tts_notify != 'yes')
+		// filter out your messages, if you asked to.
+		let fromYou = message.createUserId == Req.uid;
+		if (fromYou && Settings.values.tts_notify != 'yes')
 			continue;
 		
-		if (message.contentId == pid) {
-			// current room
-			
-			let [ room, user, time ] = [ message.contentId, message.createUserId, new Date(message.createDate) ];
-			
-			let merge = TTSSystem.lastMessage.room == room
-			&& TTSSystem.lastMessage.user == user
-			&& Math.abs(time - TTSSystem.lastMessage.time) < 1000*60*3;
-			
+		let roomSettings = TTSSystem.getRoomSettings(message.contentId);
+		
+		let isLocal = message.contentId == currentRoom;
+		let action = (isLocal ? roomSettings.localAction : roomSettings.globalAction) || 'none';
+		
+		if (action === 'none') {
+			continue;
+		} else if (action === 'speak') {
 			if (message.deleted) {
+				// pull message from queue (if still in there), to respect wishes.
 				TTSSystem.skipTagged(message.id);
 				continue;
 			}
 			
+			let [ room, user, time ] = [
+				message.contentId,
+				message.createUserId,
+				new Date(message.createDate)
+			];
+			
+			// "merge" messages from the same user, removing the "user says" part of the utterance.
+			let merge = TTSSystem.lastMessage.room == room
+			&& TTSSystem.lastMessage.user == user
+			&& Math.abs(time - TTSSystem.lastMessage.time) < 1000*60*3;
+			
+			// save this information to check against later.
 			TTSSystem.lastMessage.room = room;
 			TTSSystem.lastMessage.user = user;
 			TTSSystem.lastMessage.time = time;
@@ -496,9 +535,14 @@ Events.messages.listen(this, (c)=>{
 			
 			TTSSystem.speakMessage(message, merge);
 		} else {
-			// another room
+			// sound effect
 			
-			// TODO: sound effects for things happening in other room.
+			if (!(action instanceof HTMLAudioElement)) {
+				// TODO: GOD DAM IT! CACHING
+				action = { elem: new Audio(action), volume: TTSSystem.userParams[0].volume };
+			}
+			
+			TTSSystem.notifySound(action);
 		}
 	}
 })
