@@ -444,7 +444,7 @@ const TTSSystem = {
 ;(()=>{
 	Settings.add({
 		name: 'tts_notify', label: "TTS Notify", type: 'select',
-		options: ['no', 'everyone else', 'yes'],
+		options: ['no', 'quiet', 'everyone else', 'yes'],
 	})
 	Settings.add({
 		name: 'tts_volume', label: "TTS Volume", type: 'range',
@@ -494,7 +494,8 @@ const TTSSystem = {
 })()
 
 Events.messages.listen(this, (c)=>{
-	if (Settings.values.tts_notify == 'no') return;
+	let notifyMode = Settings.values.tts_notify;
+	if (notifyMode === 'no') return;
 	
 	if (c.length > 3) c = c.slice(-3);
 	
@@ -503,12 +504,18 @@ Events.messages.listen(this, (c)=>{
 	for (let message of c) {
 		// filter out your messages, if you asked to.
 		let fromYou = message.createUserId == Req.uid;
-		if (fromYou && Settings.values.tts_notify != 'yes')
+		if (fromYou && notifyMode !== 'yes')
 			continue;
 		
 		let roomSettings = TTSSystem.getRoomSettings(message.contentId);
 		
 		let isLocal = message.contentId == currentRoom;
+		
+		// if quiet mode enabled, just always use the global option
+		// (and yes, quiet mode also filters out your messages)
+		if (notifyMode === 'quiet')
+			isLocal = false;
+		
 		let localNotNone = roomSettings.localAction !== 'none';
 		let action = ((isLocal && localNotNone) ? roomSettings.localAction : roomSettings.globalAction) || 'none';
 		
@@ -574,6 +581,12 @@ do_when_ready(()=>{
 * Configuring the basics:
 
 The script contributes a handful of settings, so just check the user tab of the 12 frontend.
+
+It lists four options:
+- 'no' -  you won't hear TTS or notification sounds.
+- 'quiet' - the global action for rooms will override the local action. good for if you only want to hear notification sounds.
+- 'everyone else' - normal behavior, but you won't hear your own messages.
+- 'yes' - normal behavior, and you will hear your own messages.
 
 * Configuring beyond the basics:
 
@@ -669,5 +682,5 @@ do_when_ready(()=>{
 ```
 
 ```js
-hi
+i love doing this. it's like shutting the door as you step outside..
 */// ```
