@@ -299,10 +299,12 @@ const TTSSystem = {
 					opts.msg += "\nspoiler"
 					if (elem.args.label && elem.args.label != 'spoiler')
 						opts.msg += ` for ${elem.args.label}`
-					opts.msg += "\n"
 					if (this.renderInsideSpoilers) {
+						opts.msg += ":\n"
 						this.renderUtteranceBatch(elem, opts)
 						opts.msg += "\n(end spoiler)\n"
+					} else {
+						opts.msg += "\n"
 					}
 				} break;case 'heading': {
 					renderWithAltParams(elem, { rate: 0.75, volume: 1.25 })
@@ -312,7 +314,7 @@ const TTSSystem = {
 					opts.msg += "\nquote"
 					if (elem.args.cite)
 						opts.msg += ` from ${elem.args.cite}`
-					opts.msg += "\n"
+					opts.msg += ":\n"
 					this.renderUtteranceBatch(elem, opts)
 					opts.msg += "\n(end quote)\n"
 				} break;case 'ruby': {
