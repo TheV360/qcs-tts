@@ -519,7 +519,9 @@ Events.messages.listen(this, (c)=>{
 	
 	if (c.length > 3) c = c.slice(-3);
 	
-	let currentRoom = View.current instanceof PageView ? View.current.page_id : NaN;
+	let currentRooms = Nav.slots
+		.filter(slot => slot.view instanceof PageView)
+		.map(page => page.view.page_id);
 	
 	for (let message of c) {
 		// filter out your messages, if you asked to.
@@ -529,7 +531,7 @@ Events.messages.listen(this, (c)=>{
 		
 		let roomSettings = TTSSystem.getRoomSettings(message.contentId);
 		
-		let isLocal = message.contentId == currentRoom;
+		let isLocal = currentRooms.some(id => message.contentId == id);
 		
 		// if quiet mode enabled, just always use the global option
 		// (and yes, quiet mode also filters out your messages)
