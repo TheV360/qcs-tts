@@ -166,6 +166,9 @@ const TTSSystem = {
 		},
 	},
 	
+	rubyPronunciationOnly: false,
+	renderInsideSpoilers: false, // !!! RISKY
+	
 	// i mean it works.
 	notifyMediaCache: {},
 	
@@ -294,12 +297,16 @@ const TTSSystem = {
 					opts.msg += elem.args.text
 				} break;case 'spoiler': {
 					opts.msg += "\nspoiler"
-					if (elem.args.label)
+					if (elem.args.label && elem.args.label != 'spoiler')
 						opts.msg += ` for ${elem.args.label}`
 					opts.msg += "\n"
+					if (this.renderInsideSpoilers) {
+						this.renderUtteranceBatch(elem, opts)
+						opts.msg += "\n(end spoiler)\n"
+					}
 				} break;case 'heading': {
 					renderWithAltParams(elem, { rate: 0.75, volume: 1.25 })
-				} break;case 'subscript': case 'superscript': {
+				} break;case 'subscript':case 'superscript':case 'small': {
 					renderWithAltParams(elem, { volume: 0.75 })
 				} break;case 'quote': {
 					opts.msg += "\nquote"
@@ -309,9 +316,14 @@ const TTSSystem = {
 					this.renderUtteranceBatch(elem, opts)
 					opts.msg += "\n(end quote)\n"
 				} break;case 'ruby': {
-					this.renderUtteranceBatch(elem, opts)
-					if (elem.args.text)
-						opts.msg += ` (${elem.args.text})`
+					// TODO: would it be nice to try swapping the position of language elements if they happen to be inside the ruby? this will require a rewrite of a few parts of this because i wrote this without language in mind, though.
+					if (this.rubyPronunciationOnly && elem.args.text && elem.args.text != 'true') {
+						opts.msg += elem.args.text
+					} else {
+						this.renderUtteranceBatch(elem, opts)
+						if (elem.args.text)
+							opts.msg += ` (${elem.args.text})`
+					}
 				} break;case 'bg':case 'key':case 'list':case 'anchor': {
 					this.renderUtteranceBatch(elem, opts)
 				} break;case 'list_item': {
@@ -609,7 +621,10 @@ If you insert snippets that modify `TTSSystem` into your UserJS, you can configu
   - press it twice (relatively) quickly to cancel all utterances
 - Configure default voice
   - `TTSSystem.userParams[0]` contains global TTS parameters, such as volume - all the stuff that you configure inside the user tab.
-  - `TTSSystem.userParams[0].voice = "Zira" `
+  - `TTSSystem.userParams[0].voice = "Zira"` (i think this is a line of docs i forgot to finish writing?? lol?)
+- Some bonus configuration options
+  - `TTSSystem.rubyPronunciationOnly` will discard any children of ruby elements, only reading the pronunciation information. intended for foreign languages.
+  - `TTSSystem.renderInsideSpoilers` will render inside spoilers as if they were quote blocks. use with care.
 - Create per-user TTS synthesizer parameter profiles
   - two types of keys into `userParams`: (may change later)
     - qcs user id (number)
