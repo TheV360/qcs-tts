@@ -29,11 +29,15 @@ const TTSSystem = {
 		})
 	},
 	
-	getMessageAuthorName(message) {
-		if (message.Author && message.Author.bridge)
-			return message.Author.nickname || message.values.b;
-		else
-			return message.Author.username;
+	getMessageAuthorName(message, forceNickname = false) {
+		let name;
+		
+		if (forceNickname || message.Author && message.Author.bridge)
+			name = message.Author.nickname;
+		
+		name || (name = message.Author.username);
+		
+		return name;
 	},
 	
 	getUserParam(message) {
@@ -82,7 +86,7 @@ const TTSSystem = {
 		let opts = this.getUserParam(message);
 		
 		if (!merged) {
-			opts.nickname || (opts.nickname = this.getMessageAuthorName(message));
+			opts.nickname || (opts.nickname = this.getMessageAuthorName(message, !!opts.useNickname));
 			opts.msg || (opts.msg = `${opts.nickname} says; `);
 		}
 		
@@ -101,6 +105,8 @@ const TTSSystem = {
 		this.queue.push(batch);
 		
 		// it may already be speaking. if so, we've already done enough.
+		// there's another invocation of this function looping through that
+		// block directly below, and it'll get to our addition soon enough.
 		if (this.queue.length > 1 || this.currentBatch) return;
 		
 		while (this.queue.length) {
@@ -608,13 +614,14 @@ If you insert snippets that modify `TTSSystem` into your UserJS, you can configu
   - two types of keys into `userParams`: (may change later)
     - qcs user id (number)
     - bridge name (string)
-  - and a parameter object includes these fields:
+  - and a parameter object includes zero or more of these fields:
     - `nickname` - a string that specifies how the TTS speaks the username
     - `voice` - a string that matches (part of) a TTS voice
     - `volume` - a number in [0, 1]. how loud the voice is
     - `pitch` - a number in [0, 2]. the pitch of the voice
     - `rate` - a number in [0.1, 10]. how fast the voice speaks
     - `msg` - a string with the pre-message message (will override `nickname`'s effects)
+	- `useNickname` - a boolean meant for qcs user configurations. defaults to false. if the TTS should use the currently-set nickname instead of the username.
 - Change how text is pronounced with `replaceText`
   - uses syntax from `String.prototype.replaceAll` (strings, regexes, functions; all available)
   - `TTSSystem.replaceText(`{#sup{#sub pattern:}}`"V360",`{#sup{#sub replacement:}}`"v 3 60")`
