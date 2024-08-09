@@ -210,8 +210,8 @@ const TTSSystem = {
 		
 		let renderWithAltParams = (elem, {volume = 1, pitch = 1, rate = 1})=>{
 			let prev = [ opts.volume, opts.pitch, opts.rate ]
-			opts.volume *= volume; opts.pitch *= pitch; opts.rate *= rate
 			finalizeChunk()
+			opts.volume *= volume; opts.pitch *= pitch; opts.rate *= rate
 			this.renderUtteranceBatch(elem, opts)
 			finalizeChunk()
 			;[ opts.volume, opts.pitch, opts.rate ] = prev
