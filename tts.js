@@ -117,7 +117,9 @@ const TTSSystem = {
 					if (u instanceof SpeechSynthesisUtterance) await this.speakUtterance(u)
 					else if (u.elem instanceof HTMLAudioElement) await this.playSound(u)
 				}
-			} catch {} finally {
+			} catch (e) {
+				console.error(e);
+			} finally {
 				this.currentBatch = null
 				this.currentPart = null
 			}
@@ -128,12 +130,13 @@ const TTSSystem = {
 	
 	async notifySound(url) {
 		if (this.currentNotify)
-			this.currentNotify.pause();
+			this.currentNotify.elem.pause();
 		
 		let u = { volume: Math.max(0, Math.min(TTSSystem.userParams[0].volume, 1)) };
 		
-		if (url instanceof HTMLAudioElement) u.elem = url;
-		else {
+		if (url instanceof HTMLAudioElement) {
+			u.elem = url;
+		} else {
 			u.elem = this.notifyMediaCache[url]
 			|| (this.notifyMediaCache[url] = new Audio(url));
 		}
@@ -141,7 +144,9 @@ const TTSSystem = {
 		try {
 			this.currentNotify = u;
 			await this.playSound(u);
-		} catch {} finally {
+		} catch (e) {
+			console.error(e);
+		} finally {
 			this.currentNotify = null;
 		}
 	},
